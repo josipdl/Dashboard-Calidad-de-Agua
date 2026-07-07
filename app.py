@@ -1,20 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Dashboard de Calidad del Agua (1994-2019)
-Análisis Exploratorio y Predicción de Oxígeno Disuelto.
-
-Proyecto Final - Análisis de Datos
-Dataset: BKB Water Quality Data
-
-Este dashboard reutiliza directamente el código y los resultados del notebook
-`NoteBook_-_AnDa_-_ProycFinal.ipynb`:
-  - Sección 4 (limpieza / imputación de valores faltantes) -> función `limpiar_dataset()`
-  - Sección 5 (correlación: heatmap y scatter Temp vs O2)  -> gráficas 1 y 2
-  - Sección 3.4 (promedios por Site_Id)                    -> gráfica 3
-  - Sección 3.2 (evolución anual)                          -> gráfica 4
-  - Sección 7 (Random Forest Regressor para O2 continuo)   -> sección de predicción
-"""
-
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
@@ -28,9 +11,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from mapa_panama_component import get_layout as get_mapa_layout
 
-# ---------------------------------------------------------------------------
-# 1. CARGA Y LIMPIEZA DE DATOS  (reutiliza Sección 1, 3.4 y 4 del notebook)
-# ---------------------------------------------------------------------------
 
 RUTA_CSV = "BKB_WaterQualityData_2020084.csv"
 
@@ -43,7 +23,16 @@ COLS_CORRELACION = [
     "Water Temp (?C)",
     "AirTemp (C)",
 ]
-ETIQUETAS_CORR = ["Salinidad", "O2 Disuelto", "pH", "Prof. Secchi", "Prof. Agua", "Temp Agua", "Temp Aire"]
+
+ETIQUETAS_CORR = [
+    "Salinidad",
+    "O2 Disuelto",
+    "pH",
+    "Prof. Secchi",
+    "Prof. Agua",
+    "Temp Agua",
+    "Temp Aire"
+]
 
 FEATURES_MODELO = [
     "Salinity (ppt)",
@@ -59,31 +48,17 @@ VARIABLE_OBJETIVO = "Dissolved Oxygen (mg/L)"
 
 
 def cargar_dataset(ruta: str) -> pd.DataFrame:
-    """Carga el CSV original (idéntico a la Sección 1 del notebook)."""
     df = pd.read_csv(ruta)
     return df
 
 
 def limpiar_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Reutiliza exactamente la lógica de las secciones 3.4 y 4 del notebook:
-      - Corrige el error de digitación 'd' -> 'D' en Site_Id.
-      - Elimina columnas con más de 250 valores faltantes,
-        conservando 'Dissolved Oxygen (mg/L)' aunque supere el umbral.
-      - Imputa el resto de columnas numéricas con la mediana.
-      - Descarta 5 registros con Year=1899 (valor por defecto de filas sin
-        Read_Date; no corresponden a mediciones reales del periodo de estudio).
-    """
     df = df.copy()
 
-    # Sección 3.4: 'd' minúscula es la misma categoría que 'D'
     df["Site_Id"] = df["Site_Id"].replace({"d": "D"})
 
-    # Filtrar los 5 registros sin fecha real (Year=1899), igual que se
-    # descartarían filas sin Read_Date válido en un análisis temporal serio
     df = df[df["Year"] >= 1989].copy()
 
-    # Sección 4.4: columnas con más de 250 faltantes
     cols_candidatas_eliminar = df.isnull().sum()[df.isnull().sum() > 250].index.tolist()
 
     col_conservar = "Dissolved Oxygen (mg/L)"
@@ -92,8 +67,8 @@ def limpiar_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     df_clean = df.drop(columns=cols_candidatas_eliminar)
 
-    # Imputación con la mediana (Sección 4.4, segunda celda)
     cols_numericas = df_clean.select_dtypes(include=[np.number]).columns
+
     for col in cols_numericas:
         if df_clean[col].isnull().sum() > 0:
             mediana = df_clean[col].median()
@@ -110,29 +85,36 @@ YEAR_MIN = int(df_clean["Year"].min())
 YEAR_MAX = int(df_clean["Year"].max())
 
 
-# ---------------------------------------------------------------------------
-# 2. MODELO RANDOM FOREST REGRESSOR (reutiliza Sección 7 del notebook)
-# ---------------------------------------------------------------------------
-
 def entrenar_modelo(df_clean: pd.DataFrame):
-    """
-    Reutiliza la Sección 7.1 del notebook: mismas variables predictoras
-    (features_reg) y el mismo Random Forest Regressor que resultó ser el
-    mejor modelo (mayor R² en test) entre SVR y Random Forest.
-    """
+
     features_reg = [c for c in FEATURES_MODELO if c in df_clean.columns]
+
     X_r = df_clean[features_reg]
     y_r = df_clean[VARIABLE_OBJETIVO]
 
     Xr_train, Xr_test, yr_train, yr_test = train_test_split(
-        X_r, y_r, test_size=0.2, random_state=42
+        X_r,
+        y_r,
+        test_size=0.2,
+        random_state=42
     )
 
-    rf_reg = RandomForestRegressor(n_estimators=200, random_state=42)
+    rf_reg = RandomForestRegressor(
+        n_estimators=200,
+        random_state=42
+    )
+
     rf_reg.fit(Xr_train, yr_train)
 
-    r2_train = r2_score(yr_train, rf_reg.predict(Xr_train))
-    r2_test = r2_score(yr_test, rf_reg.predict(Xr_test))
+    r2_train = r2_score(
+        yr_train,
+        rf_reg.predict(Xr_train)
+    )
+
+    r2_test = r2_score(
+        yr_test,
+        rf_reg.predict(Xr_test)
+    )
 
     return rf_reg, features_reg, r2_train, r2_test
 
@@ -141,7 +123,6 @@ modelo_rf, FEATURES_MODELO_FINAL, R2_TRAIN, R2_TEST = entrenar_modelo(df_clean)
 
 
 def clasificar_oxigeno(valor: float) -> str:
-    """Misma regla ecológica usada en la Sección 6.1 del notebook."""
     if valor < 2:
         return "Bajo"
     elif valor < 5:
@@ -150,21 +131,19 @@ def clasificar_oxigeno(valor: float) -> str:
         return "Alto"
 
 
-# ---------------------------------------------------------------------------
-# 3. FUNCIONES DE GRÁFICAS (adaptan a Plotly el código matplotlib del notebook)
-# ---------------------------------------------------------------------------
-
 TEMPLATE = "plotly_dark"
 PALETA = px.colors.qualitative.Set2
 
 
 def filtrar_por_anio(df: pd.DataFrame, rango_anios):
-    return df[(df["Year"] >= rango_anios[0]) & (df["Year"] <= rango_anios[1])]
-
+    return df[
+        (df["Year"] >= rango_anios[0]) &
+        (df["Year"] <= rango_anios[1])
+    ]
 
 def grafica_heatmap(df: pd.DataFrame) -> go.Figure:
-    """Adapta la Sección 5.1 del notebook (heatmap de correlaciones)."""
     matriz_corr = df[COLS_CORRELACION].corr()
+
     matriz_corr.index = ETIQUETAS_CORR
     matriz_corr.columns = ETIQUETAS_CORR
 
@@ -176,35 +155,54 @@ def grafica_heatmap(df: pd.DataFrame) -> go.Figure:
         zmax=1,
         aspect="auto",
     )
+
     fig.update_layout(
         template=TEMPLATE,
         title="Correlación entre Variables Físico-Químicas",
         margin=dict(l=10, r=10, t=50, b=10),
         coloraxis_colorbar=dict(title="r"),
     )
+
     return fig
 
 
 def grafica_scatter(df: pd.DataFrame, sitio: str) -> go.Figure:
-    """Adapta la Sección 5.2 del notebook (Water Temp vs Dissolved Oxygen)."""
-    datos = df[["Water Temp (?C)", VARIABLE_OBJETIVO, "Site_Id"]].dropna()
+    datos = df[
+        [
+            "Water Temp (?C)",
+            VARIABLE_OBJETIVO,
+            "Site_Id"
+        ]
+    ].dropna()
 
     if sitio and sitio != "TODOS":
         datos = datos[datos["Site_Id"] == sitio]
 
     if len(datos) < 2:
         fig = go.Figure()
-        fig.update_layout(template=TEMPLATE, title="Sin datos suficientes para este filtro")
+        fig.update_layout(
+            template=TEMPLATE,
+            title="Sin datos suficientes para este filtro"
+        )
         return fig
 
-    corr = datos["Water Temp (?C)"].corr(datos[VARIABLE_OBJETIVO])
+    corr = datos["Water Temp (?C)"].corr(
+        datos[VARIABLE_OBJETIVO]
+    )
 
-    # Línea de tendencia calculada igual que en la Sección 5.2 del notebook
-    # (np.polyfit de grado 1), en vez de statsmodels, para no añadir esa
-    # dependencia extra al despliegue.
-    z = np.polyfit(datos["Water Temp (?C)"], datos[VARIABLE_OBJETIVO], 1)
+    z = np.polyfit(
+        datos["Water Temp (?C)"],
+        datos[VARIABLE_OBJETIVO],
+        1
+    )
+
     p = np.poly1d(z)
-    x_line = np.linspace(datos["Water Temp (?C)"].min(), datos["Water Temp (?C)"].max(), 100)
+
+    x_line = np.linspace(
+        datos["Water Temp (?C)"].min(),
+        datos["Water Temp (?C)"].max(),
+        100
+    )
 
     fig = px.scatter(
         datos,
@@ -213,15 +211,21 @@ def grafica_scatter(df: pd.DataFrame, sitio: str) -> go.Figure:
         opacity=0.45,
         color_discrete_sequence=["#4FD1C5"],
     )
+
     fig.add_trace(
         go.Scatter(
             x=x_line,
             y=p(x_line),
             mode="lines",
             name="Tendencia",
-            line=dict(color="#F56565", width=3, dash="dash"),
+            line=dict(
+                color="#F56565",
+                width=3,
+                dash="dash"
+            ),
         )
     )
+
     fig.update_layout(
         template=TEMPLATE,
         title=f"Temp. del Agua vs Oxígeno Disuelto  (r = {corr:.3f})",
@@ -229,23 +233,35 @@ def grafica_scatter(df: pd.DataFrame, sitio: str) -> go.Figure:
         yaxis_title="Oxígeno Disuelto (mg/L)",
         margin=dict(l=10, r=10, t=50, b=10),
     )
+
     return fig
 
 
 def grafica_barras_sitio(df: pd.DataFrame) -> go.Figure:
-    """Adapta la Sección 3.4 del notebook (promedios por Site_Id)."""
+
     promedios_sitio = df.groupby("Site_Id")[
-        ["Salinity (ppt)", VARIABLE_OBJETIVO, "pH (standard units)", "Water Temp (?C)"]
+        [
+            "Salinity (ppt)",
+            VARIABLE_OBJETIVO,
+            "pH (standard units)",
+            "Water Temp (?C)"
+        ]
     ].mean().reset_index()
 
-    promedios_sitio = promedios_sitio.rename(columns={
-        "Salinity (ppt)": "Salinidad (ppt)",
-        VARIABLE_OBJETIVO: "O2 Disuelto (mg/L)",
-        "pH (standard units)": "pH",
-        "Water Temp (?C)": "Temp. Agua (°C)",
-    })
+    promedios_sitio = promedios_sitio.rename(
+        columns={
+            "Salinity (ppt)": "Salinidad (ppt)",
+            VARIABLE_OBJETIVO: "O2 Disuelto (mg/L)",
+            "pH (standard units)": "pH",
+            "Water Temp (?C)": "Temp. Agua (°C)",
+        }
+    )
 
-    df_melt = promedios_sitio.melt(id_vars="Site_Id", var_name="Variable", value_name="Promedio")
+    df_melt = promedios_sitio.melt(
+        id_vars="Site_Id",
+        var_name="Variable",
+        value_name="Promedio"
+    )
 
     fig = px.bar(
         df_melt,
@@ -255,6 +271,7 @@ def grafica_barras_sitio(df: pd.DataFrame) -> go.Figure:
         barmode="group",
         color_discrete_sequence=PALETA,
     )
+
     fig.update_layout(
         template=TEMPLATE,
         title="Promedio de Variables por Sitio de Muestreo",
@@ -263,16 +280,20 @@ def grafica_barras_sitio(df: pd.DataFrame) -> go.Figure:
         legend_title="Variable",
         margin=dict(l=10, r=10, t=50, b=10),
     )
+
     return fig
 
 
 def grafica_evolucion_anual(df: pd.DataFrame, sitio: str) -> go.Figure:
-    """Adapta la Sección 3.2 del notebook (evolución anual del O2 disuelto)."""
+
     datos = df.copy()
+
     if sitio and sitio != "TODOS":
         datos = datos[datos["Site_Id"] == sitio]
 
-    por_anio = datos.groupby("Year")[VARIABLE_OBJETIVO].mean().reset_index()
+    por_anio = datos.groupby("Year")[
+        VARIABLE_OBJETIVO
+    ].mean().reset_index()
 
     fig = px.line(
         por_anio,
@@ -281,29 +302,42 @@ def grafica_evolucion_anual(df: pd.DataFrame, sitio: str) -> go.Figure:
         markers=True,
         color_discrete_sequence=["#68D391"],
     )
+
     fig.update_layout(
         template=TEMPLATE,
         title="Evolución Anual del Oxígeno Disuelto"
-        + (f" — Sitio {sitio}" if sitio and sitio != "TODOS" else " — Todos los sitios"),
+        + (
+            f" — Sitio {sitio}"
+            if sitio and sitio != "TODOS"
+            else " — Todos los sitios"
+        ),
         xaxis_title="Año",
         yaxis_title="Oxígeno Disuelto promedio (mg/L)",
         margin=dict(l=10, r=10, t=50, b=10),
     )
+
     return fig
 
 
-# ---------------------------------------------------------------------------
-# 4. APP DASH
-# ---------------------------------------------------------------------------
-
 app = dash.Dash(
     __name__,
-    external_stylesheets=[dbc.themes.DARKLY, dbc.icons.FONT_AWESOME],
-    meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+    external_stylesheets=[
+        dbc.themes.DARKLY,
+        dbc.icons.FONT_AWESOME
+    ],
+    meta_tags=[
+        {
+            "name": "viewport",
+            "content": "width=device-width, initial-scale=1"
+        }
+    ],
     suppress_callback_exceptions=True,
 )
+
 app.title = "Dashboard Calidad del Agua"
-server = app.server  # necesario para Render/Heroku/Gunicorn
+
+server = app.server
+
 
 CARD_STYLE = {
     "borderRadius": "1rem",
@@ -316,21 +350,33 @@ def tarjeta_kpi(titulo, valor, icono):
     return dbc.Card(
         dbc.CardBody(
             [
-                html.I(className=f"fa-solid {icono} fa-lg", style={"color": "#4FD1C5"}),
-                html.H3(valor, className="mt-2 mb-0", style={"fontWeight": "700"}),
-                html.P(titulo, className="text-muted mb-0", style={"fontSize": "0.85rem"}),
+                html.I(
+                    className=f"fa-solid {icono} fa-lg",
+                    style={"color": "#4FD1C5"}
+                ),
+                html.H3(
+                    valor,
+                    className="mt-2 mb-0",
+                    style={"fontWeight": "700"}
+                ),
+                html.P(
+                    titulo,
+                    className="text-muted mb-0",
+                    style={"fontSize": "0.85rem"}
+                ),
             ]
         ),
         style=CARD_STYLE,
         className="text-center h-100",
     )
 
-
-# --- Encabezado ---
 header = dbc.Container(
     [
-        html.H1("Dashboard de Calidad del Agua (1994-2019)", className="mt-4 mb-1",
-                style={"fontWeight": "800"}),
+        html.H1(
+            "Dashboard de Calidad del Agua (1994-2019)",
+            className="mt-4 mb-1",
+            style={"fontWeight": "800"}
+        ),
         html.P(
             "Análisis Exploratorio y Predicción de Oxígeno Disuelto.",
             className="text-muted mb-4",
@@ -338,16 +384,40 @@ header = dbc.Container(
         ),
         dbc.Row(
             [
-                dbc.Col(tarjeta_kpi("Total de registros", f"{len(df_raw):,}", "fa-database"), md=4, className="mb-3"),
-                dbc.Col(tarjeta_kpi("Variables", f"{df_raw.shape[1]}", "fa-table-columns"), md=4, className="mb-3"),
-                dbc.Col(tarjeta_kpi("Periodo cubierto", f"{YEAR_MIN} - {YEAR_MAX}", "fa-calendar-days"), md=4, className="mb-3"),
+                dbc.Col(
+                    tarjeta_kpi(
+                        "Total de registros",
+                        f"{len(df_raw):,}",
+                        "fa-database"
+                    ),
+                    md=4,
+                    className="mb-3"
+                ),
+                dbc.Col(
+                    tarjeta_kpi(
+                        "Variables",
+                        f"{df_raw.shape[1]}",
+                        "fa-table-columns"
+                    ),
+                    md=4,
+                    className="mb-3"
+                ),
+                dbc.Col(
+                    tarjeta_kpi(
+                        "Periodo cubierto",
+                        f"{YEAR_MIN} - {YEAR_MAX}",
+                        "fa-calendar-days"
+                    ),
+                    md=4,
+                    className="mb-3"
+                ),
             ]
         ),
     ],
     fluid=True,
 )
 
-# --- Controles interactivos ---
+
 controles = dbc.Container(
     dbc.Card(
         dbc.CardBody(
@@ -355,11 +425,25 @@ controles = dbc.Container(
                 [
                     dbc.Col(
                         [
-                            html.Label("Sitio de muestreo (Site_Id)", className="fw-bold mb-1"),
+                            html.Label(
+                                "Sitio de muestreo (Site_Id)",
+                                className="fw-bold mb-1"
+                            ),
                             dcc.Dropdown(
                                 id="dd-sitio",
-                                options=[{"label": "Todos los sitios", "value": "TODOS"}]
-                                + [{"label": s, "value": s} for s in SITIOS_DISPONIBLES],
+                                options=[
+                                    {
+                                        "label": "Todos los sitios",
+                                        "value": "TODOS"
+                                    }
+                                ]
+                                + [
+                                    {
+                                        "label": s,
+                                        "value": s
+                                    }
+                                    for s in SITIOS_DISPONIBLES
+                                ],
                                 value="TODOS",
                                 clearable=False,
                                 style={"color": "#111"},
@@ -369,14 +453,30 @@ controles = dbc.Container(
                     ),
                     dbc.Col(
                         [
-                            html.Label("Rango de años", className="fw-bold mb-1"),
+                            html.Label(
+                                "Rango de años",
+                                className="fw-bold mb-1"
+                            ),
                             dcc.RangeSlider(
                                 id="rs-anios",
                                 min=YEAR_MIN,
                                 max=YEAR_MAX,
-                                value=[YEAR_MIN, YEAR_MAX],
-                                marks={y: str(y) for y in range(YEAR_MIN, YEAR_MAX + 1, 5)},
-                                tooltip={"placement": "bottom", "always_visible": False},
+                                value=[
+                                    YEAR_MIN,
+                                    YEAR_MAX
+                                ],
+                                marks={
+                                    y: str(y)
+                                    for y in range(
+                                        YEAR_MIN,
+                                        YEAR_MAX + 1,
+                                        5
+                                    )
+                                },
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": False
+                                },
                             ),
                         ],
                         md=8,
@@ -391,32 +491,73 @@ controles = dbc.Container(
     className="mb-4",
 )
 
-# --- Cuadrícula 2x2 de gráficas ---
+
 graficas = dbc.Container(
     [
-        html.H2("Análisis Exploratorio", className="mb-3", style={"fontWeight": "700"}),
+        html.H2(
+            "Análisis Exploratorio",
+            className="mb-3",
+            style={"fontWeight": "700"}
+        ),
         dbc.Row(
             [
-                dbc.Col(dbc.Card(dcc.Graph(id="g-heatmap"), style=CARD_STYLE), md=6, className="mb-4"),
-                dbc.Col(dbc.Card(dcc.Graph(id="g-scatter"), style=CARD_STYLE), md=6, className="mb-4"),
+                dbc.Col(
+                    dbc.Card(
+                        dcc.Graph(id="g-heatmap"),
+                        style=CARD_STYLE
+                    ),
+                    md=6,
+                    className="mb-4"
+                ),
+                dbc.Col(
+                    dbc.Card(
+                        dcc.Graph(id="g-scatter"),
+                        style=CARD_STYLE
+                    ),
+                    md=6,
+                    className="mb-4"
+                ),
             ]
         ),
         dbc.Row(
             [
-                dbc.Col(dbc.Card(dcc.Graph(id="g-barras-sitio"), style=CARD_STYLE), md=6, className="mb-4"),
-                dbc.Col(dbc.Card(dcc.Graph(id="g-evolucion"), style=CARD_STYLE), md=6, className="mb-4"),
+                dbc.Col(
+                    dbc.Card(
+                        dcc.Graph(id="g-barras-sitio"),
+                        style=CARD_STYLE
+                    ),
+                    md=6,
+                    className="mb-4"
+                ),
+                dbc.Col(
+                    dbc.Card(
+                        dcc.Graph(id="g-evolucion"),
+                        style=CARD_STYLE
+                    ),
+                    md=6,
+                    className="mb-4"
+                ),
             ]
         ),
     ],
     fluid=True,
 )
 
-# --- Sección de predicción ---
+
 def input_predictor(id_, label, valor, step=0.1):
     return dbc.Col(
         [
-            html.Label(label, className="mb-1", style={"fontSize": "0.85rem"}),
-            dbc.Input(id=id_, type="number", value=valor, step=step),
+            html.Label(
+                label,
+                className="mb-1",
+                style={"fontSize": "0.85rem"}
+            ),
+            dbc.Input(
+                id=id_,
+                type="number",
+                value=valor,
+                step=step
+            ),
         ],
         md=3,
         className="mb-3",
@@ -425,10 +566,14 @@ def input_predictor(id_, label, valor, step=0.1):
 
 prediccion = dbc.Container(
     [
-        html.H2("Predicción de Oxígeno Disuelto", className="mb-2", style={"fontWeight": "700"}),
+        html.H2(
+            "Predicción de Oxígeno Disuelto",
+            className="mb-2",
+            style={"fontWeight": "700"}
+        ),
         html.P(
-            f"Modelo: Random Forest Regressor (n_estimators=200) — el mejor modelo obtenido en el "
-            f"notebook para predecir la variable continua. R² en test: {R2_TEST:.3f} "
+            f"Modelo: Random Forest Regressor (n_estimators=200) — "
+            f"R² en test: {R2_TEST:.3f} "
             f"(R² en entrenamiento: {R2_TRAIN:.3f}).",
             className="text-muted",
         ),
@@ -437,17 +582,64 @@ prediccion = dbc.Container(
                 [
                     dbc.Row(
                         [
-                            input_predictor("in-salinidad", "Salinidad (ppt)", round(df_clean["Salinity (ppt)"].median(), 2)),
-                            input_predictor("in-ph", "pH (standard units)", round(df_clean["pH (standard units)"].median(), 2)),
-                            input_predictor("in-temp-agua", "Water Temp (°C)", round(df_clean["Water Temp (?C)"].median(), 2)),
-                            input_predictor("in-temp-aire", "AirTemp (°C)", round(df_clean["AirTemp (C)"].median(), 2)),
+                            input_predictor(
+                                "in-salinidad",
+                                "Salinidad (ppt)",
+                                round(
+                                    df_clean["Salinity (ppt)"].median(),
+                                    2
+                                )
+                            ),
+                            input_predictor(
+                                "in-ph",
+                                "pH (standard units)",
+                                round(
+                                    df_clean["pH (standard units)"].median(),
+                                    2
+                                )
+                            ),
+                            input_predictor(
+                                "in-temp-agua",
+                                "Water Temp (°C)",
+                                round(
+                                    df_clean["Water Temp (?C)"].median(),
+                                    2
+                                )
+                            ),
+                            input_predictor(
+                                "in-temp-aire",
+                                "AirTemp (°C)",
+                                round(
+                                    df_clean["AirTemp (C)"].median(),
+                                    2
+                                )
+                            ),
                         ]
                     ),
                     dbc.Row(
                         [
-                            input_predictor("in-secchi", "Secchi Depth (m)", round(df_clean["Secchi Depth (m)"].median(), 2)),
-                            input_predictor("in-prof-agua", "Water Depth (m)", round(df_clean["Water Depth (m)"].median(), 2)),
-                            input_predictor("in-year", "Año (Year)", YEAR_MAX, step=1),
+                            input_predictor(
+                                "in-secchi",
+                                "Secchi Depth (m)",
+                                round(
+                                    df_clean["Secchi Depth (m)"].median(),
+                                    2
+                                )
+                            ),
+                            input_predictor(
+                                "in-prof-agua",
+                                "Water Depth (m)",
+                                round(
+                                    df_clean["Water Depth (m)"].median(),
+                                    2
+                                )
+                            ),
+                            input_predictor(
+                                "in-year",
+                                "Año (Year)",
+                                YEAR_MAX,
+                                step=1
+                            ),
                         ]
                     ),
                     dbc.Button(
@@ -457,7 +649,9 @@ prediccion = dbc.Container(
                         className="mt-2 mb-3",
                         n_clicks=0,
                     ),
-                    html.Div(id="resultado-prediccion"),
+                    html.Div(
+                        id="resultado-prediccion"
+                    ),
                 ]
             ),
             style=CARD_STYLE,
@@ -467,25 +661,32 @@ prediccion = dbc.Container(
     className="mb-5",
 )
 
-# --- Sección del mapa (placeholder para futura integración) ---
+
 mapa_panama = dbc.Container(
     [
-        html.H2("Mapa Interactivo de Panamá"),
+        html.H2(
+            "Mapa Interactivo de Panamá"
+        ),
         get_mapa_layout(),
     ],
     fluid=True,
     className="mb-5",
 )
 
+
 app.layout = html.Div(
-    [header, controles, graficas, prediccion, mapa_panama],
-    style={"paddingBottom": "3rem"},
+    [
+        header,
+        controles,
+        graficas,
+        prediccion,
+        mapa_panama
+    ],
+    style={
+        "paddingBottom": "3rem"
+    },
 )
 
-
-# ---------------------------------------------------------------------------
-# 5. CALLBACKS
-# ---------------------------------------------------------------------------
 
 @app.callback(
     Output("g-heatmap", "figure"),
@@ -493,8 +694,16 @@ app.layout = html.Div(
     Input("rs-anios", "value"),
 )
 def actualizar_heatmap_y_barras(rango_anios):
-    df_filtrado = filtrar_por_anio(df_clean, rango_anios)
-    return grafica_heatmap(df_filtrado), grafica_barras_sitio(df_filtrado)
+
+    df_filtrado = filtrar_por_anio(
+        df_clean,
+        rango_anios
+    )
+
+    return (
+        grafica_heatmap(df_filtrado),
+        grafica_barras_sitio(df_filtrado)
+    )
 
 
 @app.callback(
@@ -504,8 +713,16 @@ def actualizar_heatmap_y_barras(rango_anios):
     Input("rs-anios", "value"),
 )
 def actualizar_scatter_y_evolucion(sitio, rango_anios):
-    df_filtrado = filtrar_por_anio(df_clean, rango_anios)
-    return grafica_scatter(df_filtrado, sitio), grafica_evolucion_anual(df_filtrado, sitio)
+
+    df_filtrado = filtrar_por_anio(
+        df_clean,
+        rango_anios
+    )
+
+    return (
+        grafica_scatter(df_filtrado, sitio),
+        grafica_evolucion_anual(df_filtrado, sitio)
+    )
 
 
 @app.callback(
@@ -520,7 +737,17 @@ def actualizar_scatter_y_evolucion(sitio, rango_anios):
     State("in-year", "value"),
     prevent_initial_call=True,
 )
-def predecir_oxigeno(n_clicks, salinidad, ph, temp_agua, temp_aire, secchi, prof_agua, year):
+def predecir_oxigeno(
+    n_clicks,
+    salinidad,
+    ph,
+    temp_agua,
+    temp_aire,
+    secchi,
+    prof_agua,
+    year
+):
+
     valores = {
         "Salinity (ppt)": salinidad,
         "pH (standard units)": ph,
@@ -532,13 +759,35 @@ def predecir_oxigeno(n_clicks, salinidad, ph, temp_agua, temp_aire, secchi, prof
     }
 
     if any(v is None for v in valores.values()):
-        return dbc.Alert("Por favor completa todos los campos numéricos.", color="warning")
+        return dbc.Alert(
+            "Por favor completa todos los campos numéricos.",
+            color="warning"
+        )
 
-    X_nuevo = pd.DataFrame([[valores[f] for f in FEATURES_MODELO_FINAL]], columns=FEATURES_MODELO_FINAL)
-    prediccion_valor = float(modelo_rf.predict(X_nuevo)[0])
-    categoria = clasificar_oxigeno(prediccion_valor)
+    X_nuevo = pd.DataFrame(
+        [
+            [
+                valores[f]
+                for f in FEATURES_MODELO_FINAL
+            ]
+        ],
+        columns=FEATURES_MODELO_FINAL
+    )
 
-    colores = {"Bajo": "danger", "Medio": "warning", "Alto": "success"}
+    prediccion_valor = float(
+        modelo_rf.predict(X_nuevo)[0]
+    )
+
+    categoria = clasificar_oxigeno(
+        prediccion_valor
+    )
+
+    colores = {
+        "Bajo": "danger",
+        "Medio": "warning",
+        "Alto": "success"
+    }
+
     descripciones = {
         "Bajo": "Condición de hipoxia (< 2 mg/L): riesgo para la vida acuática.",
         "Medio": "Nivel aceptable (2 - 5 mg/L).",
@@ -551,8 +800,16 @@ def predecir_oxigeno(n_clicks, salinidad, ph, temp_agua, temp_aire, secchi, prof
                 dbc.Card(
                     dbc.CardBody(
                         [
-                            html.P("Predicción estimada:", className="mb-1 text-muted"),
-                            html.H3(f"{prediccion_valor:.2f} mg/L", style={"fontWeight": "800"}),
+                            html.P(
+                                "Predicción estimada:",
+                                className="mb-1 text-muted"
+                            ),
+                            html.H3(
+                                f"{prediccion_valor:.2f} mg/L",
+                                style={
+                                    "fontWeight": "800"
+                                }
+                            ),
                         ]
                     ),
                     style=CARD_STYLE,
@@ -563,9 +820,22 @@ def predecir_oxigeno(n_clicks, salinidad, ph, temp_agua, temp_aire, secchi, prof
                 dbc.Card(
                     dbc.CardBody(
                         [
-                            html.P("Categoría de calidad:", className="mb-1 text-muted"),
-                            dbc.Badge(categoria, color=colores[categoria], className="fs-5 px-3 py-2 mb-2"),
-                            html.P(descripciones[categoria], className="mb-0", style={"fontSize": "0.85rem"}),
+                            html.P(
+                                "Categoría de calidad:",
+                                className="mb-1 text-muted"
+                            ),
+                            dbc.Badge(
+                                categoria,
+                                color=colores[categoria],
+                                className="fs-5 px-3 py-2 mb-2"
+                            ),
+                            html.P(
+                                descripciones[categoria],
+                                className="mb-0",
+                                style={
+                                    "fontSize": "0.85rem"
+                                }
+                            ),
                         ]
                     ),
                     style=CARD_STYLE,
@@ -577,9 +847,9 @@ def predecir_oxigeno(n_clicks, salinidad, ph, temp_agua, temp_aire, secchi, prof
     )
 
 
-# ---------------------------------------------------------------------------
-# 6. EJECUCIÓN LOCAL
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8050)
+    app.run(
+        debug=True,
+        host="0.0.0.0",
+        port=8050
+    )
